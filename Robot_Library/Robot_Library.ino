@@ -1,13 +1,15 @@
-// Define toolbox parameters (Optinal) 
-#define Delimiter ' '      // Delimiter for message arguments, default is ' '. 
-#define Baudrate 9600      // Baudrate for serial communication, default is 9600.
-
 // Include the toolbox header file
 #include "Toolbox_Core.h" 
 
 void setup()  {
-  Serial.begin(Baudrate); // Initialize serial communication.
-  Welcome_Msg();          // Displays welcome message at startup.
+  /* // Configure the system parameters (optional)
+  Config.Delimiter = '.';   // default value is ' '
+  Config.Baudrate = 57600;  // default value is 9600 
+                            // default values can be changed in data.h
+  */
+  
+  Serial.begin(Config.Baudrate); // Initialize serial communication.
+  Logger.Welcome_Msg();          // Displays welcome message at startup.
 }
 
 void loop() { 

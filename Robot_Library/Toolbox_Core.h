@@ -1,8 +1,8 @@
 // ============================================================ Toolbox ============================================== //
 /*
   Author: Alexander Levy
-  Version: 0.0.3
-  Change: Added the toggle command. 
+  Version: 0.0.6
+  Change: Re-organized the whole code. 
 
   Need to add some comments here explaining the purpose of the code, basically it just receives commands 
   over serial and sends back a reply msg.I pretty much do this in my free time as a tool to develop cool 
@@ -13,136 +13,40 @@
 /*
   Just a list of things i wanna work on at the moment, some of these will take a while
   DEV:
-    [ ] Add preprocesor for different microcontrollers
-    [ ] Add log system
+    [ ] Fix log system code = trash
     
   TODO:
     [ ] Add the planned commands.
-    [ ] Add option to work with Time stamps 
-    [ ] Make Message a struct instead of a class.
     [ ] Add more communication protocols for sending and receving data
         [x] Serial
-        [ ] I2C
         [ ] WiFi
-        [ ] SPI (maybe?)
-    [ ] Port to ESP-32 family.
-*/
-
-// ================================================================= Libraries ======================================= //
-/*
-  #include "Arduino.h"         // Must be included if you're not using the Arduino IDE (im basic like that)
 */
 
 // ================================================================= Constants ======================================== //
-#define ENTER 10                                  // The char value for the Enter Key.
-#define Firmware_Version "0.0.3"                  // Version control metric for myself.
+#define ENTER 10                                  // The ASCII value for the Enter Key.
+#define Firmware_Version "0.0.6"                  // Version control metric for myself.
 #define New_Msg_Arrives (Serial.available() > 0)  // Determine weather there is a new message on the serial bus.
 
-
-// =================================================================== Macros ======================================== //
-// Define the default baudrate for serialcommunication.
-#ifndef Baudrate
-  #define Baudrate 9600
-#endif
-
-// Define the default delimitir to use when parsing the message.
-#ifndef Delimiter
-  #define Delimiter ' '
-#endif
-
-/* // Define the default board as AtMega328p.
-#ifndef Board
-  #define Board ATMega328p 
-#endif
-
-// Define the number of pins based on the board type.
-  // Arduino Uno/Nano.
-  #if Board == "Nano" 
-    #define Num_of_Digital_Pins 14 // Number of digital I/O pins
-    #define Num_of_Analog_Pins 6   // Number of analog pins
-    #define LED_BUILTIN 13         // Pin that the built-in led is connected to.
-
-  // Arduino Mega.
-  #elif Board == "ATMega2560" 
-    #define Num_of_Digital_Pins 54 // Number of digital I/O pins
-    #define Num_of_Analog_Pins 16  // Number of analog pins
-    #define LED_BUILTIN 13         // Pin that the built-in led is connected to.
-  
-  #endif
-// Note: Need to implement and test esp32 board. */
-
-// ================================================================== Commands ======================================= //
-// Used to define the state of the system, it will only execute commands if initialized.
-#define Initialize_System  'i'   // Initializes the system
-#define Shutdown_System    'c'   // Shutdown the system
-
-// Provide system information 
-#define Help               'h'   // Shows command list and program information
-#define Get_State          'q'   // Shows debug info
-
-// Test command
-#define Blink              'b'   // Blinks Led for 3 seconds
-
-// Used to configure, read and write to GIO pins
-#define Toggle             't'   // Invert pin state
-#define PinMode            'p'   // Set pin as Input[0] or Output[1]
-#define GetPinMode         'g'   // Read pin configuration
-#define Digital_Read       'd'   // Read pin logic level
-#define Digital_Write      'w'   // Set pin as LOW[0] or HIGH[1]
-
-// Used internally for testing and debuging
-#define debug              '.'   // Used for checking messages, dev use only, will be removed in the future.
-
-/*
-  Planned commands 
-    Analog_Write
-    Analog_Read
-    Set_PWM_Value
-    Set_PWM_Frecuency
-*/
-
-// ================================================================== Data Structures ================================== //
-struct Message {
-  char CharIn;                   // Character being read 
-  char Command;                  // Command sent to controller
-  char Value1[16];               // Values for more complex commands 
-  char Value2[16];               // Values for more complex commands
-  uint8_t Index = 0;             // Position of the character in the message
-  uint8_t value_pos = 0;         // Position of the char in the value string.
-  uint32_t NumValue1, NumValue2; // Values converted to numbers
-};
-// Note: plan to change this to a class and include some on the global funtions as methods.
-
 // ================================================================== Global Variables ================================== //
-// These keep track of program flags and time passed.
-bool System = false;           // State of the system, only performs commands when initialized
-unsigned long Time;            // Time since the program started running 
+bool System = false;  // State of the system, only performs commands when initialized
+unsigned long Time;   // Time since the program started running 
 
-// Used to parse and store the received message.
-struct Message Msg;
+#include "Data.h"     // Load data structures used globally
+#include "Logger.h"   // Load the system logging module.
+#include "Commands.h" // Load commmands used for defining the funtion call
 
 // ================================================================ Funtion Declaration ================================== //
 // Control flow funtions
-void RunCommand();                // Runs the command received from the PC
-void ResetCommand();              // Internal Funtion used to clean the command msg (used internally)
-void Parse_Command();             // Listens for a command and executes it (serial over usb)
-void SlaveModeLoop();             // Controller enters the slave loop
-void Init();                      // Initialize controller (need a better way to do this since this implemntation forces me to change the header file which in not ideal)
-void Shutdown();                  // Shutdown system and any running process(also need a better method for this)
-
-// Printing funtions
-void Welcome_Msg();               // Prints the welcome message sent when the controller boots up 
-void Error_Msg();                 // Prints Error message
-void Help_Msg();                  // Prints helpfull information and list of commands
-void debug_Msg();                 // Prints the inputed parsed messaged
-void Print_Input_Msg();           // Prints the msg recived
-void PrintPinStatus(uint8_t pin); // Prints pin pinmode configuration
-void PrintPinValue(uint8_t pin);  // Prints pin value 
-void PrintSystemStatus();         // Prints controller I/O information
+void Init();          // Initialize controller (need a better way to do this since this implemntation forces me to change the header file which in not ideal)
+void Shutdown();      // Shutdown system and any running process(also need a better method for this)
+void RunCommand();    // Runs the command received from the PC
+void ResetCommand();  // Internal Funtion used to clean the command msg (used internally)
+void Parse_Command(); // Listens for a command and executes it (serial over usb)
+void SlaveModeLoop(); // Controller enters the slave loop
 
 // Hardware Funtions
-void TogglePin(uint8_t pin);      // Toggle pin state
-uint8_t getPinMode(uint8_t pin);  // Get current pin configuration {INPUT/OUTPUT/INPUT_PULLUP}
+void TogglePin(uint8_t pin);     // Toggle pin state
+uint8_t getPinMode(uint8_t pin); // Get current pin configuration {INPUT/OUTPUT/INPUT_PULLUP}
 
 // Exe Funtions
 void Blink_Func();
@@ -151,15 +55,7 @@ void Blink_Func();
 void SlaveModeLoop() {
   while(New_Msg_Arrives) { // Serial Communication is available
     Parse_Command();       // Parse msg data and execute command
-
   }
-}
-
-void Welcome_Msg() {
-  Serial.print("Welcome to prototype software version ");
-  Serial.println(Firmware_Version);
-  Serial.println("Press h for help.");
-  Serial.println(" ");
 }
 
 void RunCommand() {
@@ -178,21 +74,21 @@ void RunCommand() {
       break;
     
     case Help:
-      Help_Msg();
+      Logger.Help_Msg();
       break;
-    
+    /*
     case Get_State:
-      if(System == false) Error_Msg(); 
-      else PrintSystemStatus();  
+      if(System == false) Logger.Error_Msg(); 
+      else Logger.PrintSystemStatus();  
       break;
-    
+    */
     case Blink:
-      if(System == false) Error_Msg(); 
+      if(System == false) Logger.Error_Msg(); 
       else Blink_Func();      
       break;
     
     case PinMode:
-      if(System == false) Error_Msg();
+      if(System == false) Logger.Error_Msg();
       else {
         if((Msg.NumValue2 < 0) && (Msg.NumValue2 > 2)) {
           Serial.println("Pinmode value not supported, set pinmode as 0 for input, 1 for output or 2 for input_pullup."); 
@@ -206,10 +102,10 @@ void RunCommand() {
       break;
     
     case Digital_Read:
-      if(System == false) Error_Msg();
+      if(System == false) Logger.Error_Msg();
       else {
         Serial.print("OK: ");
-        PrintPinValue(Msg.NumValue1);
+        Logger.PrintPinValue(Msg.NumValue1);
         Serial.println("");
       }
       break;
@@ -217,7 +113,7 @@ void RunCommand() {
     case Digital_Write:
       // Verify system is initialized
       if(System == false) {
-        Error_Msg();
+        Logger.Error_Msg();
         break; 
       }
       // Verify pin is configured as output.
@@ -244,17 +140,28 @@ void RunCommand() {
       break;
     
     case GetPinMode:
-      if(System == false) Error_Msg();
+      if(System == false) Logger.Error_Msg();
 
       else {
-        Serial.print("OK: ");
-        PrintPinStatus(Msg.NumValue1);
-        Serial.println("");
+        Serial.print("pin ");
+        Serial.print(Msg.NumValue1);
+        
+        if(getPinMode(Msg.NumValue1) == 0xFF) {
+          Serial.println("is NOT A PIN");
+          return;
+        }
+        else {
+          Serial.print(" is configured as: ");
+          if(getPinMode(Msg.NumValue1) == 1) Serial.print("OUTPUT ");
+          else if(getPinMode(Msg.NumValue1) == 0) Serial.print("INPUT  ");
+          else if(getPinMode(Msg.NumValue1) == 2) Serial.print("INPUT_PULLUP ");
+          return;
+        }
       }
       break;
-    
+
     case Toggle: 
-      if(System == false) Error_Msg();
+      if(System == false) Logger.Error_Msg();
 
       else {
         TogglePin(Msg.NumValue1);
@@ -266,7 +173,7 @@ void RunCommand() {
       return;
 
     case debug:
-      debug_Msg(); 
+      Logger.debug_Msg(); 
       break;
 
     default:
@@ -291,7 +198,7 @@ void Parse_Command() {
   }
 
   // Parse message info based on spaces
-  else if(Msg.CharIn == Delimiter) {
+  else if(Msg.CharIn == Config.Delimiter) {
     // Start reading the first argument.
     if(Msg.Index == 0) Msg.Index = 1;
     // Start reading the second argument.
@@ -352,103 +259,6 @@ uint8_t getPinMode(uint8_t pin) {
   }
 }
 
-void PrintPinStatus(uint8_t pin) {
-  Serial.print("pin ");
-  Serial.print(pin);
-
-  if(getPinMode(pin) == 0xFF) {
-    Serial.println("is NOT A PIN");
-    return;
-  }
-
-  else {
-    Serial.print(" is configured as: ");
-    if(getPinMode(pin) == 1) Serial.print("OUTPUT ");
-    else if(getPinMode(pin) == 0) Serial.print("INPUT  ");
-    else if(getPinMode(pin) == 2) Serial.print("INPUT_PULLUP ");
-    return;
-  }
-} 
-
-void PrintPinValue(uint8_t pin) {
-  Serial.print("pin ");
-  Serial.print(pin);
-  Serial.print(" is ");
-  if(digitalRead(pin) == 0) Serial.println("LOW");
-  else Serial.println("HIGH");
-}
-
-void Error_Msg() {
-  Serial.println("Error: The controller is not initiliazed, unable to perform command.");
-  Serial.println(" ");
-}
-
-void Help_Msg() {
-  Serial.println("System Information");
-  Serial.println("\tFirmware status: early development.");
-  Serial.print("\tFirmware version: ");
-  Serial.println(Firmware_Version);
-  Serial.println("\tSupported Platforms: Arduino(Uno/Mega/Nano).");
-  Serial.print("\tBaudrate: ");
-  Serial.println(Baudrate);
-  Serial.println(" ");
-  Serial.println("List of commands: ");
-  Serial.println("  -h: press for help and software info.");
-  Serial.println("  -i: press to initialize the system.");
-  Serial.println("  -c: press to shutdown the system.");
-  Serial.println("  -q: press to get system status info.");
-  Serial.println("  -b: press to blink the builtin led.");
-  Serial.println("  -d: press to read pin status(Digital read)");
-  Serial.println("       -example: 'd 5' reads pihn 5.");
-  Serial.println("  -w: press to set pin as LOW[0] or HIGH[1](Digital Write)");
-  Serial.println("       -example: 'x 5 0' sets pin 5 as LOW.");
-  Serial.println("  -p: press to set pin as either input[0], output[1] or input_pullup[2].");
-  Serial.println("       -example: 'p 5 0' sets pin 5 as an input.");
-  Serial.println("  -g: press to get the pinmode of the pin.");
-  Serial.println("       -example: 'g 5' gets the pinmode of pin 5.");
-  Serial.println(" ");
-}
-
-void PrintSystemStatus() {
-  // General system information
-  Serial.println("System information. ");
-  Serial.print("\tThe state of the system is: ");
-  if(digitalRead(LED_BUILTIN) == HIGH) Serial.println("Initialized.");
-  else Serial.println("Shutdown.");
-  //Serial.println("");
-
-  /*   // Microntroller info
-  Serial.print("\tMicrocontroller: ");
-  // Verify the board type
-  #if Board == ATMega328p
-    Serial.println("ATMega328p Arduino Uno/Nano");
-  #endif
-
-  #if Board == ATMega2560
-    Serial.println("ATMega2560 Arduino Mega 2560");
-  #endif
-
-  Serial.println("") */;
-
-  // Time since program started.
-  Serial.print("\tTime since boot: ");
-  Serial.print((float)Time/1000);
-  Serial.println(" seconds.");
-  Serial.println("");
-  
-  // Digital pins status
-  Serial.println("Digital pins status: ");
-  for(uint8_t i = 0; i < 54; i++) {
-    Serial.print("\t");
-    PrintPinStatus(i);
-    PrintPinValue(i);
-  }
-  Serial.println("");
-
-  // Analoge Pins
-  //write stuff here 
-}
-
 void Init() {
   System = true;
   Time = millis();
@@ -480,25 +290,6 @@ void Blink_Func() {
   Serial.println("Led blinking done."); 
 }
 
-void debug_Msg() {
-  Serial.print("The received message is: ");
-  Serial.print(Msg.Command);
-  Serial.print(Delimiter);
-  Serial.print(Msg.NumValue1);
-  Serial.print(Delimiter);
-  Serial.println(Msg.NumValue2); 
-  Serial.println("");
-}
-
-void Print_Input_Msg() {
-  Serial.print(Msg.Command);
-  Serial.print(Delimiter);
-  Serial.print(Msg.NumValue1);
-  Serial.print(Delimiter);
-  Serial.println(Msg.NumValue2); 
-}
-
 void TogglePin(uint8_t pin) {
   digitalWrite(pin, !digitalRead(pin));
 }
-
